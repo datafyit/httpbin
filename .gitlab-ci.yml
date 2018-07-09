@@ -1,0 +1,47 @@
+image: docker:latest
+
+stages:
+ - build
+ - release
+
+variables:
+  CONTAINER_BASE_NAME: registry.gitlab.com/datafy/httpbin
+  CONTAINER_TEST_IMAGE: $CONTAINER_BASE_NAME:$CI_COMMIT_REF_SLUG
+  CONTAINER_RELEASE_IMAGE: $CONTAINER_BASE_NAME:latest
+  DOCKER_CLIENT_TIMEOUT: '240'
+  COMPOSE_HTTP_TIMEOUT: '240'
+
+before_script:
+ - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+ - echo $CONTAINER_BASE_NAME
+ - echo $CONTAINER_TEST_IMAGE
+ - echo $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8}
+ - echo $CONTAINER_TO_TEST_IMAGE
+ - echo $CONTAINER_RELEASE_IMAGE
+
+build:
+  stage: build
+  script:
+    - docker build -t $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8} -t $CONTAINER_TO_TEST_IMAGE .
+    - docker push $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8}
+
+release-production:
+  stage: release
+  script:
+    - docker pull $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8}
+    - docker tag $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8} $CONTAINER_RELEASE_IMAGE
+    - docker push $CONTAINER_RELEASE_IMAGE
+    - docker tag $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8} $CONTAINER_BASE_NAME:$CI_COMMIT_TAG
+    - docker push $CONTAINER_BASE_NAME:$CI_COMMIT_TAG
+  only:
+    - master
+
+release-dev:
+  stage: release
+  script:
+    - docker pull $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8}
+    - docker tag $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8} $CONTAINER_BASE_NAME:${CI_COMMIT_SHA:0:8}
+    - docker push $CONTAINER_BASE_NAME:${CI_COMMIT_SHA:0:8}
+    - docker rmi $CONTAINER_TO_TEST_IMAGE $CONTAINER_TEST_IMAGE.${CI_COMMIT_SHA:0:8}
+  except:
+    - master
